@@ -1,6 +1,9 @@
 import random
 import math
 import time
+import numpy as np
+from pandas import Series
+import struct
 
 # Definitions
 INPUT_NEURONS = 28*28
@@ -16,6 +19,7 @@ NETWORK_TESTING_SET_START = 59900
 NETWORK_TESTING_SET_END = 59999
 
 IMAGE_SIZE_BYTES = 784
+
 
 class Network:
     timer = None
@@ -180,128 +184,152 @@ class Network:
         return x * (1 - x)
 
 
-class MnistFileReader:
-
-    timer = None
+class mnist_data:
 
     IMAGE_LOCATION = "C:/Users/Greg/IdeaProjects/NeuralNetwork-Python/resources/trainImage.idx3-ubyte"
     LABEL_LOCATION = "C:/Users/Greg/IdeaProjects/NeuralNetwork-Python/resources/trainLabel.idx1-ubyte"
 
-    cached_images = []
-    cached_labels = []
+    images = None
+    labels = None
 
-    def __init__(self, timer):
-        print("new file reader")
-        self.timer = timer
+    num_of_images = 0
+    num_of_labels = 0
 
-    def read_images(self):
-        if len(self.cached_images) == 0:
-            content = []
-            with open(self.IMAGE_LOCATION, "rb") as idx_file:
-                content = idx_file.read()
-            content = content[16:]
-            self.cached_images = content
-        return self.cached_images
+    img_pxl_x = 0
+    img_pxl_y = 0
 
-    def get_image(self, index):
-        self.timer.get_image_start = timer.log_time()
+    def __init__(self):
+        print("Starting file reader")
 
-        all_images = self.read_images()
-        image_at_index = all_images[index*IMAGE_SIZE_BYTES:(index+1)*IMAGE_SIZE_BYTES]
-        image_as_input = []
-        for bte in image_at_index:
-            image_as_input.append(bte/256)
+    def get_images(self):
+        if self.images is None or len(self.images) == 0:
+            with open(self.IMAGE_LOCATION, "rb") as idx_images:
+                magic_number, self.num_of_images, self.img_pxl_y, self.img_pxl_x = struct.unpack(">IIII", idx_images.read(16))
+                all_imgs = np.fromfile(idx_images, dtype=np.uint8)
+                all_imgs_2d = np.reshape(all_imgs, (self.num_of_images, self.img_pxl_x*self.img_pxl_y))
+            self.images = all_imgs_2d
+        return self.images
 
-        self.timer.get_image_end = timer.log_time()
-        self.timer.print_get_image_time()
-        return image_as_input
-
-    def read_labels(self):
-        if len(self.cached_labels) == 0:
-            content = []
-            with open(self.LABEL_LOCATION, "rb") as idx_file:
-                content = idx_file.read()
-
-            content = content[8:]
-            self.cached_labels = content
-        return self.cached_labels
-
-    def get_label(self, index):
-        self.timer.get_label_start = timer.log_time()
-
-        all_labels = self.read_labels()
-        output = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        output[all_labels[index]] = 1
-
-        self.timer.get_label_end = timer.log_time()
-        self.timer.print_get_label_time()
-        return output
+    def get_labels(self):
+        if self.labels is None or len(self.labels) == 0:
+            with open(self.LABEL_LOCATION, "rb") as idx_labels:
+                magic_number, self.num_of_labels = struct.unpack(">II", idx_labels.read(8))
+                all_labels = np.fromfile(idx_labels, np.uint8)
+            self.labels = all_labels
+        return self.labels
 
 
-class Timer:
+class mnist_batch:
 
-    print_data = 0
-    print_network = 1
+    batch_size: 0
 
-    program_start = 0
-    program_end = 0
+    mnist_data: None
+    mnist_images: None
+    mnist_labels: None
 
-    get_image_start = 0
-    get_image_end = 0
+    def __init__(self, mnist_data, batch_size):
+        print("Initializing batch")
+        self.mnist_data = mnist_data
+        self.mnist_images = mnist_data.get_images()
+        self.mnist_labels = mnist_data.get_labels()
+        self.batch_size = batch_size
 
-    get_label_start = 0
-    get_label_end = 0
+    def get_batch(self):
+        print("Getting batch")
+        e = self.elimination_matrix(self.mnist_data.num_of_images, self.batch_size)
 
-    network_init_start = 0
-    network_init_end = 0
+        image_batch = np.compress(e, self.mnist_images, axis=0)
+        label_batch = np.compress(e, self.mnist_labels, axis=0)
+        return image_batch, label_batch
 
-    network_run_through_start = 0
-    network_run_through_end = 0
+    def elimination_matrix(self, size, batch_size):
+        e_matrix = np.full(size, False)
+        e_matrix[:batch_size] = True
+        np.random.shuffle(e_matrix)
+        return e_matrix
 
-    network_backprop_start = 0
-    network_backprop_end = 0
 
-    network_update_weights_start = 0
-    network_update_weights_end = 0
+class network:
+    no_of_layers: None
+    max_layer_size: None
 
-    def log_time(self):
-        return time.time()
+    layers: None
+    biases: None
+    weights: None
 
-    def print_get_image_time(self):
-        if self.print_data == 1:
-            print("GETTING IMAGE: " + str(self.get_image_end - self.get_image_start))
+    def __init__(self, layers):
+        print("Creating Network")
+        self.layers = layers
+        self.no_of_layers = len(layers)
+        self.max_layer_size = max(layers)
+        self.biases = self.create_biases(layers)
+        self.weights = self.create_weights(layers)
 
-    def print_get_label_time(self):
-        if self.print_data == 1:
-            print("GETTING LABEL: " + str(self.get_label_end - self.get_label_start))
+    def create_biases(self, layers):
+        biases = np.random.random((self.no_of_layers, self.max_layer_size))
+        elim_matrix = self.elim_matrix(layers)
+        return biases*elim_matrix
 
-    def print_network_init_time(self):
-        if self.print_network == 1:
-            print("NETWORK INIT: " + str(self.network_init_end - self.network_init_start))
+    def create_weights(self, layers):
+        weights = np.random.random((self.no_of_layers-1, self.max_layer_size, self.max_layer_size))
+        elim_matrix = self.weight_elim_matrix(layers)
+        results = weights*elim_matrix
+        print(results)
 
-    def print_network_run_through_time(self):
-        if self.print_network == 1:
-            print("NETWORK RUN THROUGH: " + str(self.network_run_through_end - self.network_run_through_start))
+    def elim_matrix(self, layers):
+        e = np.full((self.no_of_layers, self.max_layer_size), 1)
+        for layer in range(0, self.no_of_layers):
+            e[layer][layers[layer]:] = 0
+        return e
 
-    def print_network_backprop_time(self):
-        if self.print_network == 1:
-            print("NETWORK BACK PROP: " + str(self.network_backprop_end - self.network_backprop_start))
+    def weight_elim_matrix(self, layers):
+        e = np.array([])
+        for layer in range(1, self.no_of_layers):
+            e_sub_sub = np.full(self.max_layer_size, 1)
+            e_sub_sub[layers[layer-1]:] = 0
+            e_sub = np.tile(e_sub_sub, self.max_layer_size)
+            e_sub[self.max_layer_size*layers[layer]:] = 0
+            e = np.append(e, e_sub)
+        e = e.reshape(self.no_of_layers-1, self.max_layer_size, self.max_layer_size)
+        return e
 
-    def print_network_update_weights_time(self):
-        if self.print_network == 1:
-            print("NETWORK UPDATE WEIGHTS: " + str(self.network_update_weights_end - self.network_update_weights_start))
 
 print("******************************************************")
 print("********************** Starting **********************")
 print("******************************************************")
 
-timer = Timer()
-timer.program_start = timer.log_time()
+batch_size = 100
+layers = Series([784, 70, 35, 10], ["input", "hidden_1", "hidden_2", "output"])
 
-file_reader = MnistFileReader(timer)
+np_start = time.time()
 
-network = Network(NETWORK_LAYERS, file_reader, timer)
-network.train()
-network.test()
+mnist_batch = mnist_batch(mnist_data(), batch_size)
+images, labels = mnist_batch.get_batch()
 
-timer.program_end = timer.log_time()
+network = network([784, 70, 35, 10])
+
+
+a = np.full((3, 4, 4), 1)
+print(a)
+print("---")
+e = np.full(4, 1)
+e[2:] = 0
+e = np.tile(e, 3*4)
+print(e)
+print("---")
+
+f = a.flatten()
+print(f)
+print("---")
+
+r = f*e
+r = np.reshape(r, (3, 4, 4))
+print(r)
+
+np_end = time.time()
+print("%.3f s" % (np_end - np_start))
+
+
+print("******************************************************")
+print("**********************   Done   **********************")
+print("******************************************************")
