@@ -256,6 +256,8 @@ class network:
     layers: None
     biases: None
     weights: None
+    outputs: None
+    error_sigs: None
 
     def __init__(self, layers):
         print("Creating Network")
@@ -264,19 +266,20 @@ class network:
         self.max_layer_size = max(layers)
         self.biases = self.create_biases(layers)
         self.weights = self.create_weights(layers)
+        self.outputs = np.full((self.no_of_layers, self.max_layer_size), 0)
+        self.error_sigs = np.full((self.no_of_layers, self.max_layer_size), 0)
 
     def create_biases(self, layers):
         biases = np.random.random((self.no_of_layers, self.max_layer_size))
-        elim_matrix = self.elim_matrix(layers)
+        elim_matrix = self.layer_sizes_elim_matrix(layers)
         return biases*elim_matrix
 
     def create_weights(self, layers):
         weights = np.random.random((self.no_of_layers-1, self.max_layer_size, self.max_layer_size))
         elim_matrix = self.weight_elim_matrix(layers)
-        results = weights*elim_matrix
-        print(results)
+        return weights*elim_matrix
 
-    def elim_matrix(self, layers):
+    def layer_sizes_elim_matrix(self, layers):
         e = np.full((self.no_of_layers, self.max_layer_size), 1)
         for layer in range(0, self.no_of_layers):
             e[layer][layers[layer]:] = 0
@@ -293,6 +296,15 @@ class network:
         e = e.reshape(self.no_of_layers-1, self.max_layer_size, self.max_layer_size)
         return e
 
+    def train(self, images, labels, loops, ):
+        print("Training")
+        #for index in range(0, len(images)):
+        image = images[0]
+        label = labels[0]
+
+        self.outputs[0] = image
+
+
 
 print("******************************************************")
 print("********************** Starting **********************")
@@ -306,25 +318,54 @@ np_start = time.time()
 mnist_batch = mnist_batch(mnist_data(), batch_size)
 images, labels = mnist_batch.get_batch()
 
-network = network([784, 70, 35, 10])
+print(images.shape)
+print(labels.shape)
+
+#network = network([784, 70, 35, 10])
+#network.train(images, labels, 50)
 
 
-a = np.full((3, 4, 4), 1)
-print(a)
-print("---")
-e = np.full(4, 1)
-e[2:] = 0
-e = np.tile(e, 3*4)
-print(e)
-print("---")
 
-f = a.flatten()
-print(f)
-print("---")
 
-r = f*e
-r = np.reshape(r, (3, 4, 4))
-print(r)
+
+weights = np.full((4,3), 1)
+print(weights)
+output_pl = np.array([2, 2, 3])
+print("output previous layer")
+print(output_pl)
+bias = np.array([2, 2, 2, 2])
+print("bias")
+print(bias)
+
+sum_plus_bias = np.sum(output_pl*weights, axis=1) + bias
+print("sum_plus_bias")
+print(sum_plus_bias)
+
+
+rs = output_pl * weights
+print("Oj*Wij")
+print(rs)
+
+Eow = np.sum(rs, axis=1)
+print("Eij Oj*Wij")
+print(Eow)
+
+Eow_b = np.add(Eow, bias)
+print(Eow_b)
+
+
+
+
+#for layer in range(1, 4):
+#    print(layer)
+#    for neuron in range(0, 3):
+#        o1 = outputs[layer-1]
+#        w1 = weights[layer][neuron]
+#        print(o1)
+#        print(w1)
+#        E1 = np.sum(o1*w1) + biases[layer][neuron]
+#        print(E1)
+
 
 np_end = time.time()
 print("%.3f s" % (np_end - np_start))
